@@ -7,7 +7,6 @@ free, open-source tools.
 
 ---
 
-
 ## What it does
 
 When a compliance team needs to prove "this is exactly what the privacy policy
@@ -27,6 +26,8 @@ own computer's clock.
 ---
 
 ## Architecture
+
+The pipeline, stage by stage:
 
 ```
    [ Trigger ]   run it manually  OR  on a schedule (CI)
@@ -53,30 +54,25 @@ own computer's clock.
         v
    [ 6. REPORT ]   report.html (easy to read) + receipt.json (machine summary)
 ```
-                            ┌────────────────────┐
-                            │   url / urls.txt   │   (input)
-                            └─────────┬──────────┘
-                                      │
-        external tools                ▼
-   ┌───────────────────┐    ┌────────────────────┐         ┌──────────────────────┐
-   │ Playwright +      │──▶ │  capture_policy.py │──imports─▶  evidence_common.py  │
-   │ Chromium          │    │  (runs the capture)│         │  (shared toolbox)     │
-   ├───────────────────┤    └─────────┬──────────┘         └──────────┬───────────┘
-   │ openssl + FreeTSA │──▶           │ writes                        │ imports
-   └───────────────────┘              ▼                               │
-                            ┌────────────────────┐                    │
-                            │   evidence bundle  │                    │
-                            │  files + manifest  │                    │
-                            │  + timestamp token │                    │
-                            └─────────┬──────────┘                    │
-                                      │ reads                         │
-                                      ▼                               │
-                            ┌────────────────────┐                    │
-                            │ verify_evidence.py │◀───────────────────┘
-                            │ (re-checks evidence)│
-                            └────────────────────┘
 
-                            
+How the modules connect:
+
+```mermaid
+flowchart TD
+    IN["url / urls.txt"] --> CP["capture_policy.py<br/>runs the capture"]
+    PW["Playwright + Chromium"] --> CP
+    TS["openssl + FreeTSA"] --> CP
+    CP -- imports --> EC["evidence_common.py<br/>shared toolbox"]
+    CP -- writes --> EB["evidence bundle<br/>files + manifest + token"]
+    EB -- reads --> VE["verify_evidence.py<br/>re-checks evidence"]
+    VE -- imports --> EC
+```
+
+`capture_policy.py` runs the capture (using Playwright and openssl + FreeTSA) and
+imports the shared `evidence_common.py` toolbox. `verify_evidence.py` reads the
+evidence bundle later and imports the same toolbox — so the capturer and the
+auditor check evidence in exactly the same way.
+
 ### Why this proves integrity — the chain of trust
 
 Each step is locked to the one below it by a fingerprint:
@@ -156,7 +152,7 @@ Output:
 Overall Result: VERIFIED
 ```
 
-## Prove tamper-detection works 
+## Prove tamper-detection works
 
 Edit one character in any captured file, then re-run `verify_evidence.py`. That
 file now shows `FAIL` and the overall result becomes `FAILED`. Undo the edit and
